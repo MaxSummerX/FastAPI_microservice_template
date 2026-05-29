@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.presentation.routers.users import router
+from app.presentation.routers import auth, users
 
 
 app = FastAPI(
@@ -9,7 +9,8 @@ app = FastAPI(
 )
 
 
-app.include_router(router, prefix="/api/V1")
+app.include_router(users.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1")
 
 
 @app.get("/health_check", tags=["Health Check"])
