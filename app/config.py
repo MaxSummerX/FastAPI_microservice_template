@@ -21,5 +21,9 @@ class Settings(BaseSettings):
 
     DEBUG: bool = Field(default=False, description="Режим отладки")
 
+    GOOGLE_CLIENT_ID: str = Field(..., description="Client ID для Google OAuth")
+    GOOGLE_CLIENT_SECRET: SecretStr = Field(..., description="Client Secret для Google OAuth")
+    GOOGLE_REDIRECT_URI: str = Field(..., description="URI обратного вызова после авторизации Google")
+
 
 settings = Settings()
