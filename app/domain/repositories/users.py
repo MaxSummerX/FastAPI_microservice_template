@@ -70,3 +70,17 @@ class IUserRepository(ABC):
             user_id: Уникальный идентификатор пользователя
         """
         pass
+
+    @abstractmethod
+    async def get_by_oauth(self, oauth_provider: str, oauth_id: str) -> User | None:
+        """
+        Найти пользователя по OAuth провайдеру и ID.
+
+        Args:
+            oauth_provider: Название OAuth провайдера
+            oauth_id: Уникальный идентификатор пользователя в OAuth
+
+        Returns:
+            Объект User или None, если пользователь не найден
+        """
+        pass
