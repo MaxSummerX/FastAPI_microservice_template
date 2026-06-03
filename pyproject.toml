@@ -18,12 +18,18 @@ dependencies = [
     "uvicorn[standard]>=0.47.0",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [dependency-groups]
 dev = [
     "mypy>=2.1.0",
     "ruff>=0.15.14",
     "pre-commit>=4.6.0",
-    "bandit>=1.9.4"
+    "bandit>=1.9.4",
+    "pytest-asyncio>=1.4.0",
+    "pytest>=9.0.3",
+    "faker>=40.21.0",
 ]
 
 [tool.ruff]
