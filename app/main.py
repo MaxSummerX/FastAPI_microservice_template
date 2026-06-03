@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.database.dependencies import get_db
 from app.presentation.routers import auth, users
 
 
@@ -19,5 +22,14 @@ async def health_check() -> dict[str, str]:
 
 
 @app.get("/readiness_check", tags=["Readiness Check"])
-async def readiness_check() -> dict[str, str]:
+async def readiness_check(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database is not available") from None
     return {"status": "ready"}
+
+
+@app.get("/", tags=["Root"])
+async def root() -> dict[str, str]:
+    return {"status": "Hello from User-service"}
