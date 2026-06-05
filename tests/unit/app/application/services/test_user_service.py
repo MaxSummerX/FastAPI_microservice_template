@@ -102,9 +102,7 @@ async def test_login_or_create_existing_user(
 
 
 @pytest.mark.asyncio
-async def test_login_or_create_new_user(
-    user_service: UserService, mock_user_repo: AsyncMock, example_user: User, faker: Faker
-) -> None:
+async def test_login_or_create_new_user(user_service: UserService, mock_user_repo: AsyncMock, faker: Faker) -> None:
     """Проверяет, что login_or_create создаёт нового пользователя при первом входе."""
     mock_user_repo.get_by_oauth.return_value = None
     mock_user_repo.create.side_effect = lambda user: user
