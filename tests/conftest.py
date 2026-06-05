@@ -1,14 +1,23 @@
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from faker import Faker
+from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.application.services.user_service import UserService
 from app.config import Settings
 from app.domain.entities.user import User
 from app.domain.repositories.users import IUserRepository
+from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.persistence.models import User as UserModel
+from app.infrastructure.persistence.models.base_model import Base
+from app.main import app
 
 
 @pytest.fixture
@@ -53,3 +62,39 @@ def test_settings() -> Settings:
 @pytest.fixture(autouse=True)
 def _override_settings(monkeypatch: pytest.MonkeyPatch, test_settings: Settings) -> None:
     monkeypatch.setattr("app.infrastructure.auth.jwt.settings", test_settings)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def test_db_engine(test_settings: Settings) -> AsyncGenerator[AsyncEngine]:
+    engine = create_async_engine(test_settings.DATABASE_URL, echo=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    yield engine
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def test_session_factory(test_db_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(test_db_engine, expire_on_commit=False, class_=AsyncSession)
+
+
+@pytest_asyncio.fixture
+async def test_db_session(test_session_factory: async_sessionmaker[AsyncSession]) -> AsyncGenerator[AsyncSession]:
+    async with test_session_factory() as session:
+        await session.execute(delete(UserModel))
+        await session.commit()
+        await session.begin()
+        yield session
+        if session.is_active:
+            await session.rollback()
+
+
+@pytest_asyncio.fixture
+async def test_client(test_db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
+    app.dependency_overrides[get_db] = lambda: test_db_session
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+    app.dependency_overrides.clear()
