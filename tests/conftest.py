@@ -1,7 +1,9 @@
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import jwt
 import pytest
 import pytest_asyncio
 from faker import Faker
@@ -17,6 +19,7 @@ from app.domain.repositories.users import IUserRepository
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.persistence.models import User as UserModel
 from app.infrastructure.persistence.models.base_model import Base
+from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 from app.main import app
 
 
@@ -98,3 +101,47 @@ async def test_client(test_db_session: AsyncSession) -> AsyncGenerator[AsyncClie
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def db_user(test_db_session: AsyncSession, faker: Faker) -> User:
+    user = User.create_from_oauth(
+        email=faker.email(),
+        firstname=faker.first_name(),
+        lastname=faker.last_name(),
+        oauth_provider="google",
+        oauth_id=faker.numerify("#" * 21),
+    )
+    repo = UserSQLAlchemyRepository(test_db_session)
+    await repo.create(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def other_db_user(test_db_session: AsyncSession, faker: Faker) -> User:
+    user = User.create_from_oauth(
+        email=faker.email(),
+        firstname=faker.first_name(),
+        lastname=faker.last_name(),
+        oauth_provider="google",
+        oauth_id=faker.numerify("#" * 21),
+    )
+    repo = UserSQLAlchemyRepository(test_db_session)
+    await repo.create(user)
+    return user
+
+
+@pytest.fixture
+def auth_headers(test_settings: Settings, db_user: User) -> dict[str, str]:
+    expire = datetime.now(UTC) + timedelta(minutes=30)
+    payload = {"sub": str(db_user.id), "email": db_user.email, "exp": expire}
+    token = jwt.encode(payload, key=test_settings.SECRET_KEY.get_secret_value(), algorithm=test_settings.ALGORITHM)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def other_user_auth_headers(test_settings: Settings, other_db_user: User) -> dict[str, str]:
+    expire = datetime.now(UTC) + timedelta(minutes=30)
+    payload = {"sub": str(other_db_user.id), "email": other_db_user.email, "exp": expire}
+    token = jwt.encode(payload, key=test_settings.SECRET_KEY.get_secret_value(), algorithm=test_settings.ALGORITHM)
+    return {"Authorization": f"Bearer {token}"}
