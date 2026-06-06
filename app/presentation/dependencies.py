@@ -10,6 +10,8 @@ from app.domain.entities.user import User
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.auth.jwt import decode_token
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.message_brokers.kafka.dependencies import get_event_publisher
+from app.infrastructure.message_brokers.protocols.publisher import IEventPublisher
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 
 
@@ -21,9 +23,11 @@ def get_user_repo(db: AsyncSession = Depends(get_db)) -> IUserRepository:
     return UserSQLAlchemyRepository(db)
 
 
-def get_user_service(repo: IUserRepository = Depends(get_user_repo)) -> UserService:
+def get_user_service(
+    repo: IUserRepository = Depends(get_user_repo), publisher: IEventPublisher = Depends(get_event_publisher)
+) -> UserService:
     """Возвращает сервис пользователей."""
-    return UserService(repo)
+    return UserService(user_repo=repo, event_publisher=publisher)
 
 
 async def get_current_user(
