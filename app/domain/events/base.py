@@ -11,3 +11,8 @@ class BaseEvent:
     event_title: ClassVar[str]
     event_id: UUID = field(default_factory=uuid4, kw_only=True)
     occurred_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC), kw_only=True)
+
+    @property
+    def routing_key(self) -> str:
+        """Ключ маршрутизации для брокера. Подклассы могут переопределить."""
+        return str(self.event_id)

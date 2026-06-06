@@ -17,6 +17,10 @@ class UserCreatedEvent(BaseEvent):
     firstname: str
     lastname: str
 
+    @property
+    def routing_key(self) -> str:
+        return str(self.user_id)
+
 
 @dataclass(frozen=True)
 class UserLoggedInEvent(BaseEvent):
@@ -27,6 +31,10 @@ class UserLoggedInEvent(BaseEvent):
     email: str
     origin: str
 
+    @property
+    def routing_key(self) -> str:
+        return str(self.user_id)
+
 
 @dataclass(frozen=True)
 class UserUpdatedEvent(BaseEvent):
@@ -36,3 +44,7 @@ class UserUpdatedEvent(BaseEvent):
     user_id: UUID
     firstname: str | None
     lastname: str | None
+
+    @property
+    def routing_key(self) -> str:
+        return str(self.user_id)
