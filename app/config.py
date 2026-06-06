@@ -25,5 +25,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: SecretStr = Field(..., description="Client Secret для Google OAuth")
     GOOGLE_REDIRECT_URI: str = Field(..., description="URI обратного вызова после авторизации Google")
 
+    KAFKA_URL: str = Field(..., description="Адрес подключения к Kafka (host:port)")
+    KAFKA_ENABLE_IDEMPOTENCE: bool = Field(default=True, description="Включение идемпотентности")
+    KAFKA_ACKS: str = Field(default="all", description="Требования к подтверждению сообщения")
+
+    USER_EVENTS_TOPIC: str = Field(default="user.events", description="Топик для событий пользователя")
+
 
 settings = Settings()
