@@ -17,6 +17,8 @@ from app.config import Settings
 from app.domain.entities.user import User
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.database.dependencies import get_db
+from app.infrastructure.message_brokers.kafka.dependencies import get_event_publisher
+from app.infrastructure.message_brokers.protocols.publisher import IEventPublisher
 from app.infrastructure.persistence.models import User as UserModel
 from app.infrastructure.persistence.models.base_model import Base
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
@@ -43,8 +45,14 @@ def mock_user_repo() -> AsyncMock:
 
 
 @pytest.fixture
-def user_service(mock_user_repo: IUserRepository) -> UserService:
-    return UserService(mock_user_repo)
+def mock_event_publisher() -> AsyncMock:
+    publisher = AsyncMock(spec=IEventPublisher)
+    return publisher
+
+
+@pytest.fixture
+def user_service(mock_user_repo: IUserRepository, mock_event_publisher: IEventPublisher) -> UserService:
+    return UserService(mock_user_repo, mock_event_publisher)
 
 
 @pytest.fixture(scope="session")
@@ -59,6 +67,8 @@ def test_settings() -> Settings:
         GOOGLE_CLIENT_ID="test-client-id",
         GOOGLE_CLIENT_SECRET=SecretStr("test-client-secret"),
         GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback",
+        KAFKA_URL="localhost:9092",
+        USER_EVENTS_TOPIC="user.events",
     )
 
 
@@ -95,8 +105,10 @@ async def test_db_session(test_session_factory: async_sessionmaker[AsyncSession]
 
 
 @pytest_asyncio.fixture
-async def test_client(test_db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
+async def test_client(test_db_session: AsyncSession, mock_event_publisher: AsyncMock) -> AsyncGenerator[AsyncClient]:
+
     app.dependency_overrides[get_db] = lambda: test_db_session
+    app.dependency_overrides[get_event_publisher] = lambda: mock_event_publisher
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
