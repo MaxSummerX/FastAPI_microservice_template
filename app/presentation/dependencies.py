@@ -1,7 +1,8 @@
+from typing import cast
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,12 +11,16 @@ from app.domain.entities.user import User
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.auth.jwt import decode_token
 from app.infrastructure.database.dependencies import get_db
-from app.infrastructure.message_brokers.kafka.dependencies import get_event_publisher
 from app.infrastructure.message_brokers.protocols.publisher import IEventPublisher
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 
 
 bearer_scheme = HTTPBearer()
+
+
+def get_event_publisher(request: Request) -> IEventPublisher:
+    """Возвращает экземпляр KafkaEventPublisher."""
+    return cast(IEventPublisher, request.app.state.publisher)
 
 
 def get_user_repo(db: AsyncSession = Depends(get_db)) -> IUserRepository:

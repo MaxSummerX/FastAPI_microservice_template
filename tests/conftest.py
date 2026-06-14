@@ -17,12 +17,12 @@ from app.config import Settings
 from app.domain.entities.user import User
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.database.dependencies import get_db
-from app.infrastructure.message_brokers.kafka.dependencies import get_event_publisher
 from app.infrastructure.message_brokers.protocols.publisher import IEventPublisher
 from app.infrastructure.persistence.models import User as UserModel
 from app.infrastructure.persistence.models.base_model import Base
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 from app.main import app
+from app.presentation.dependencies import get_event_publisher
 
 
 @pytest.fixture
