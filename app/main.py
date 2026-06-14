@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -6,15 +8,50 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.dependencies import get_db
-from app.infrastructure.message_brokers.kafka.dependencies import close_publisher, init_publisher
+from app.infrastructure.logging import setup_consumer_file_log, setup_logging
+from app.infrastructure.message_brokers.kafka.factories import create_consumer, create_publisher
+from app.presentation.event_dispatcher import dispatcher, process_events
+from app.presentation.handlers import register_handlers
 from app.presentation.routers import auth, users
+
+
+setup_logging()
+setup_consumer_file_log()
+register_handlers()
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    await init_publisher()
-    yield
-    await close_publisher()
+    logger.info("Запуск publisher")
+    publisher = create_publisher()
+    await publisher.start()
+    app.state.publisher = publisher
+    logger.info("Publisher запущен")
+
+    try:
+        logger.info("Запуск consumer")
+        async with create_consumer() as consumer:
+            task = asyncio.create_task(process_events(consumer, dispatcher), name="event_consumer")
+            logger.info("Consumer запущен")
+            logger.info("Приложение запущено")
+            try:
+                yield
+            finally:
+                logger.info("Завершение работы приложения")
+                logger.info("Остановка consumer")
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                logger.info("Consumer остановлен")
+
+    finally:
+        await publisher.stop()
+        logger.info("Publisher остановлен")
+        logger.info("Работа приложения завершена")
 
 
 app = FastAPI(title="User-service", version="0.1.0", lifespan=lifespan)
