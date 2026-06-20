@@ -7,15 +7,23 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.user_service import UserService
+from app.config import settings
 from app.domain.entities.user import User
 from app.domain.repositories.users import IUserRepository
 from app.infrastructure.auth.jwt import decode_token
+from app.infrastructure.cache.protocol.cache import ICache
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.message_brokers.protocols.publisher import IEventPublisher
+from app.infrastructure.persistence.cached_user_repository import CachedUserRepository
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 
 
 bearer_scheme = HTTPBearer()
+
+
+def get_cache(request: Request) -> ICache:
+    """Возвращает экземпляр кэша."""
+    return cast(ICache, request.app.state.cache)
 
 
 def get_event_publisher(request: Request) -> IEventPublisher:
@@ -23,9 +31,9 @@ def get_event_publisher(request: Request) -> IEventPublisher:
     return cast(IEventPublisher, request.app.state.publisher)
 
 
-def get_user_repo(db: AsyncSession = Depends(get_db)) -> IUserRepository:
-    """Возвращает репозиторий пользователей."""
-    return UserSQLAlchemyRepository(db)
+def get_user_repo(db: AsyncSession = Depends(get_db), cache: ICache = Depends(get_cache)) -> IUserRepository:
+    """Своп: отдаём кэширующий декоратор вместо голого SQL-репозитория."""
+    return CachedUserRepository(UserSQLAlchemyRepository(db), cache, ttl=settings.REDIS_TTL)
 
 
 def get_user_service(

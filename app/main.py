@@ -1,12 +1,13 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.cache.redis.factories import create_cache
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.logging import setup_consumer_file_log, setup_logging
 from app.infrastructure.message_brokers.kafka.factories import create_consumer, create_publisher
@@ -24,34 +25,39 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    logger.info("Запуск publisher")
-    publisher = create_publisher()
-    await publisher.start()
-    app.state.publisher = publisher
-    logger.info("Publisher запущен")
+    async with AsyncExitStack() as stack:
+        logger.info("Запуск cache")
+        cache = create_cache()
+        await cache.start()
+        stack.push_async_callback(cache.stop)
+        app.state.cache = cache
+        logger.info("Cache запущен")
 
-    try:
+        logger.info("Запуск publisher")
+        publisher = create_publisher()
+        await publisher.start()
+        stack.push_async_callback(publisher.stop)
+        app.state.publisher = publisher
+        logger.info("Publisher запущен")
+
         logger.info("Запуск consumer")
-        async with create_consumer() as consumer:
-            task = asyncio.create_task(process_events(consumer, dispatcher), name="event_consumer")
-            logger.info("Consumer запущен")
-            logger.info("Приложение запущено")
-            try:
-                yield
-            finally:
-                logger.info("Завершение работы приложения")
-                logger.info("Остановка consumer")
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-                logger.info("Consumer остановлен")
+        consumer = await stack.enter_async_context(create_consumer())
+        logger.info("Consumer запущен")
 
-    finally:
-        await publisher.stop()
-        logger.info("Publisher остановлен")
-        logger.info("Работа приложения завершена")
+        task = asyncio.create_task(process_events(consumer, dispatcher), name="event_consumer")
+        logger.info("Приложение запущено")
+
+        try:
+            yield
+        finally:
+            logger.info("Завершение работы приложения")
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            logger.info("Consumer остановлен")
+    logger.info("Работа приложения завершена")
 
 
 app = FastAPI(title="User-service", version="0.1.0", lifespan=lifespan)
