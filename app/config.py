@@ -31,5 +31,11 @@ class Settings(BaseSettings):
 
     USER_EVENTS_TOPIC: str = Field(default="user.events", description="Топик для событий пользователя")
 
+    REDIS_HOST: str = Field(..., description="Хост Redis")
+    REDIS_PORT: int = Field(..., description="Порт Redis")
+    REDIS_DB: int = Field(default=0, description="Номер базы Redis")
+    REDIS_PASSWORD: SecretStr = Field(..., description="Пароль Redis")
+    REDIS_TTL: int = Field(default=3600, description="TTL для кэша Redis")
+
 
 settings = Settings()
