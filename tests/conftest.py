@@ -16,13 +16,33 @@ from app.application.services.user_service import UserService
 from app.config import Settings
 from app.domain.entities.user import User
 from app.domain.repositories.users import IUserRepository
+from app.infrastructure.cache.protocol.cache import ICache
 from app.infrastructure.database.dependencies import get_db
 from app.infrastructure.message_brokers.protocols.publisher import IEventPublisher
 from app.infrastructure.persistence.models import User as UserModel
 from app.infrastructure.persistence.models.base_model import Base
 from app.infrastructure.persistence.sqlalchemy.user_repository import UserSQLAlchemyRepository
 from app.main import app
-from app.presentation.dependencies import get_event_publisher
+from app.presentation.dependencies import get_cache, get_event_publisher
+
+
+class FakeCache(ICache):
+    def __init__(self) -> None:
+        self._cache: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self._cache.get(key)
+
+    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
+        self._cache[key] = value
+
+    async def delete(self, key: str) -> None:
+        self._cache.pop(key, None)
+
+
+@pytest_asyncio.fixture
+async def fake_cache() -> FakeCache:
+    return FakeCache()
 
 
 @pytest.fixture
@@ -69,6 +89,11 @@ def test_settings() -> Settings:
         GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback",
         KAFKA_URL="localhost:9092",
         USER_EVENTS_TOPIC="user.events",
+        REDIS_HOST="localhost",
+        REDIS_PORT=6379,
+        REDIS_DB=0,
+        REDIS_PASSWORD=SecretStr("test-redis-password"),
+        REDIS_TTL=3600,
     )
 
 
@@ -105,10 +130,14 @@ async def test_db_session(test_session_factory: async_sessionmaker[AsyncSession]
 
 
 @pytest_asyncio.fixture
-async def test_client(test_db_session: AsyncSession, mock_event_publisher: AsyncMock) -> AsyncGenerator[AsyncClient]:
-
+async def test_client(
+    test_db_session: AsyncSession,
+    mock_event_publisher: AsyncMock,
+    fake_cache: FakeCache,
+) -> AsyncGenerator[AsyncClient]:
     app.dependency_overrides[get_db] = lambda: test_db_session
     app.dependency_overrides[get_event_publisher] = lambda: mock_event_publisher
+    app.dependency_overrides[get_cache] = lambda: fake_cache
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
