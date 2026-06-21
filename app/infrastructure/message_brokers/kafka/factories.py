@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from app.config import settings
@@ -34,6 +36,9 @@ def create_consumer() -> KafkaEventConsumer:
     """Создать экземпляр Kafka-консьюмера для обработки входящих событий."""
     consumer = AIOKafkaConsumer(
         bootstrap_servers=settings.KAFKA_URL,
+        group_id=settings.KAFKA_CONSUMER_GROUP,
+        client_id=f"consumer-{uuid4().hex[:8]}",
+        auto_offset_reset="earliest",
     )
     return KafkaEventConsumer(
         consumer=consumer,
