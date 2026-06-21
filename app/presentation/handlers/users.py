@@ -7,7 +7,7 @@ consumer_logger = logging.getLogger("kafka.consumer")
 
 
 async def handle_user_created(event: UserCreatedEvent) -> None:
-    consumer_logger.info("user created: %s | %s", event.user_id, event.email)
+    consumer_logger.info("user created: %s | %s | %s | %s", event.user_id, event.email, event.firstname, event.lastname)
 
 
 async def handle_user_updated(event: UserUpdatedEvent) -> None:
