@@ -1,0 +1,17 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.example
+.gitignore
+.python-version
+.vscode/
+.idea/
+.claude/
+*.md
+Makefile
+Dockerfile
+docker_compose/
+tests/
