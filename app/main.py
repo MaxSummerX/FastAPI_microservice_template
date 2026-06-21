@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -9,16 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.cache.redis.factories import create_cache
 from app.infrastructure.database.dependencies import get_db
-from app.infrastructure.logging import setup_consumer_file_log, setup_logging
-from app.infrastructure.message_brokers.kafka.factories import create_consumer, create_publisher
-from app.presentation.event_dispatcher import dispatcher, process_events
-from app.presentation.handlers import register_handlers
-from app.presentation.routers import auth, users
+from app.infrastructure.logging import setup_logging
+from app.infrastructure.message_brokers.kafka.factories import create_publisher
+from app.presentation.routers import auth, demo, users
 
 
 setup_logging()
-setup_consumer_file_log()
-register_handlers()
 
 logger = logging.getLogger(__name__)
 
@@ -40,23 +35,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.publisher = publisher
         logger.info("Publisher запущен")
 
-        logger.info("Запуск consumer")
-        consumer = await stack.enter_async_context(create_consumer())
-        logger.info("Consumer запущен")
-
-        task = asyncio.create_task(process_events(consumer, dispatcher), name="event_consumer")
-        logger.info("Приложение запущено")
-
         try:
             yield
         finally:
             logger.info("Завершение работы приложения")
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            logger.info("Consumer остановлен")
     logger.info("Работа приложения завершена")
 
 
@@ -65,6 +47,9 @@ app = FastAPI(title="User-service", version="0.1.0", lifespan=lifespan)
 
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+
+# Демо-роутер для демонстрации consumer-group
+app.include_router(demo.router, prefix="/api/v1")
 
 
 @app.get("/health_check", tags=["Health Check"])
