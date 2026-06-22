@@ -36,8 +36,11 @@ async def process_events(consumer: IEventConsumer, router: EventDispatcher) -> N
     async for event in consumer.subscribe(settings.USER_EVENTS_TOPIC):
         try:
             await router.dispatch(event)
+            await consumer.ack()
         except UnknownEventError:
-            logger.warning("Unknown event: %s", event.event_title)
+            logger.warning("Нет обработчика для события: %s", event.event_title)
+            # делаем commit что сообщение обработано, чтобы не зацикливаться на отсутствии обработчика
+            await consumer.ack()
 
 
 dispatcher = EventDispatcher()

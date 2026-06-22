@@ -39,6 +39,7 @@ def create_consumer() -> KafkaEventConsumer:
         group_id=settings.KAFKA_CONSUMER_GROUP,
         client_id=f"consumer-{uuid4().hex[:8]}",
         auto_offset_reset="earliest",
+        enable_auto_commit=False,
     )
     return KafkaEventConsumer(
         consumer=consumer,

@@ -19,3 +19,8 @@ class IEventConsumer(ABC):
     def subscribe(self, topic: str) -> AsyncGenerator[BaseEvent]:
         """Подписаться на топик."""
         pass
+
+    @abstractmethod
+    async def ack(self) -> None:
+        """Подтвердить обработку события."""
+        pass

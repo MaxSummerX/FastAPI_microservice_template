@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from dataclasses import fields
 from datetime import datetime
@@ -11,6 +12,9 @@ from aiokafka import AIOKafkaConsumer
 from app.domain.events.base import BaseEvent
 from app.infrastructure.message_brokers.exception import UnknownEventError
 from app.infrastructure.message_brokers.protocols.consumer import IEventConsumer
+
+
+logger = logging.getLogger(__name__)
 
 
 class KafkaEventConsumer(IEventConsumer):
@@ -42,6 +46,9 @@ class KafkaEventConsumer(IEventConsumer):
         self.consumer.subscribe([topic])
         return self._message_generator()
 
+    async def ack(self) -> None:
+        await self.consumer.commit()
+
     async def _message_generator(self) -> AsyncGenerator[BaseEvent]:
         """Асинхронный генератор: читает сообщения и десериализует в доменные события."""
         async for message in self.consumer:
@@ -50,8 +57,9 @@ class KafkaEventConsumer(IEventConsumer):
             try:
                 data = orjson.loads(message.value)
                 yield self._from_dict(data)
-            except (UnknownEventError, orjson.JSONDecodeError):
-                pass  # TODO: Добавить логгирование
+            except (UnknownEventError, orjson.JSONDecodeError) as e:
+                logger.warning("Пропущено битое сообщение: %s", e)
+                await self.consumer.commit()
 
     def _from_dict(self, data: dict) -> BaseEvent:
         """Десериализует словарь в доменное событие по event_title."""
