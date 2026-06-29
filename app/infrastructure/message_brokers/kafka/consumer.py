@@ -10,7 +10,7 @@ import orjson
 from aiokafka import AIOKafkaConsumer
 
 from app.domain.events.base import BaseEvent
-from app.infrastructure.message_brokers.exception import UnknownEventError
+from app.infrastructure.message_brokers.exception import MalformedMessageError, UnknownEventError
 from app.infrastructure.message_brokers.protocols.consumer import IEventConsumer
 
 
@@ -23,6 +23,9 @@ class KafkaEventConsumer(IEventConsumer):
     def __init__(self, consumer: AIOKafkaConsumer, event_mapping: dict[str, type[BaseEvent]]):
         self.consumer = consumer
         self.event_mapping = event_mapping
+        self._type_hints = {
+            event: {f.name: f.type for f in fields(event_cls)} for event, event_cls in event_mapping.items()
+        }
 
     async def start(self) -> None:
         await self.consumer.start()
@@ -57,8 +60,14 @@ class KafkaEventConsumer(IEventConsumer):
             try:
                 data = orjson.loads(message.value)
                 yield self._from_dict(data)
-            except (UnknownEventError, orjson.JSONDecodeError) as e:
-                logger.warning("Пропущено битое сообщение: %s", e)
+            except orjson.JSONDecodeError as e:
+                logger.warning("Пропущено: не JSON — %s", e)
+                await self.consumer.commit()
+            except UnknownEventError as e:
+                logger.warning("Пропущено: неизвестный тип события — %s", e)
+                await self.consumer.commit()
+            except MalformedMessageError as e:
+                logger.warning("Пропущено: битый payload — %s", e)
                 await self.consumer.commit()
 
     def _from_dict(self, data: dict) -> BaseEvent:
@@ -67,13 +76,16 @@ class KafkaEventConsumer(IEventConsumer):
         event_cls = self.event_mapping.get(event_title, None)
         if event_cls is None:
             raise UnknownEventError(f"Unknown event: {event_title}")
-        type_hints = {f.name: f.type for f in fields(event_cls)}
-        for key, value in data.items():
-            if key not in type_hints:
-                continue
-            hint = type_hints[key]
-            if hint is UUID and isinstance(value, str):
-                data[key] = UUID(value)
-            elif hint is datetime and isinstance(value, str):
-                data[key] = datetime.fromisoformat(value)
-        return event_cls(**data)
+        type_hints = self._type_hints[event_title]
+        try:
+            for key, value in data.items():
+                if key not in type_hints:
+                    continue
+                hint = type_hints[key]
+                if hint is UUID and isinstance(value, str):
+                    data[key] = UUID(value)
+                elif hint is datetime and isinstance(value, str):
+                    data[key] = datetime.fromisoformat(value)
+            return event_cls(**data)
+        except (ValueError, TypeError) as e:
+            raise MalformedMessageError(f"Malformed message: {e}") from e

@@ -30,6 +30,18 @@ services:
       retries: 10
       start_period: 40s
 
+  kafka-init:
+    image: confluentinc/cp-kafka:8.2.2
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists \
+          --topic ${USER_EVENTS_TOPIC} --partitions 3 --replication-factor 1
+        echo "✅ Topic ${USER_EVENTS_TOPIC} ready"
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     ports:
@@ -81,6 +93,8 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     depends_on:
+      kafka-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
       postgres:
@@ -99,6 +113,8 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     depends_on:
+      kafka-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
       postgres:

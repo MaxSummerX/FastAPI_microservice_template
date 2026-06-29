@@ -4,13 +4,16 @@ from typing import TypeVar
 
 from app.config import settings
 from app.domain.events.base import BaseEvent
-from app.infrastructure.message_brokers.exception import UnknownEventError
 from app.infrastructure.message_brokers.protocols.consumer import IEventConsumer
 
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseEvent)
+
+
+class HandlerNotFoundError(Exception):
+    pass
 
 
 class EventDispatcher:
@@ -27,7 +30,7 @@ class EventDispatcher:
         """Найти обработчик по `event.event_title` и вызвать его."""
         handler = self._handlers.get(event.event_title)
         if not handler:
-            raise UnknownEventError(event.event_title)
+            raise HandlerNotFoundError(event.event_title)
         await handler(event)
 
 
@@ -37,9 +40,12 @@ async def process_events(consumer: IEventConsumer, router: EventDispatcher) -> N
         try:
             await router.dispatch(event)
             await consumer.ack()
-        except UnknownEventError:
+        except HandlerNotFoundError:
             logger.warning("Нет обработчика для события: %s", event.event_title)
             # делаем commit что сообщение обработано, чтобы не зацикливаться на отсутствии обработчика
+            await consumer.ack()
+        except Exception as e:
+            logger.error("Ошибка при обработке события %s: %s", event.event_title, e)
             await consumer.ack()
 
 
